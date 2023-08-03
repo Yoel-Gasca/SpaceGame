@@ -1,5 +1,4 @@
 // -Add Motion-
-// @ts-check
 // Crea una clase EventEmitter para publicar y suscribirse a mensajes
 class EventEmitter {
 	constructor() {
@@ -35,6 +34,16 @@ class GameObject {
 	draw(ctx) {
 		ctx.drawImage(this.img, this.x, this.y, this.width, this.height);
 	}
+
+	// Configura una representación rectangular del objeto de juego, para manejar la colisión
+	rectFromGameObject() {
+		return {
+		  top: this.y,
+		  left: this.x,
+		  bottom: this.y + this.height,
+		  right: this.x + this.width,
+		};
+	  }
 }
 
 // GameObject para crear el héroe y los enemigos.
@@ -44,6 +53,34 @@ class Hero extends GameObject {
 		(this.width = 99), (this.height = 75);
 		this.type = 'Hero';
 		this.speed = { x: 0, y: 0 };
+		this.cooldown = 0;
+		this.life = 3;
+		this.points = 0;
+	}
+	fire() {
+		gameObjects.push(new Laser(this.x + 45, this.y - 10));
+		this.cooldown = 500;
+
+		let id = setInterval(() => {
+			if (this.cooldown > 0) {
+				this.cooldown -= 100;
+				if(this.cooldown === 0) {
+					clearInterval(id);
+				}
+			}
+		}, 200);
+	}
+	canFire() {
+		return this.cooldown === 0;
+	}
+	decrementLife() {
+		this.life--;
+		if (this.life === 0) {
+			this.dead = true;
+		}
+	}
+	incrementPoints() {
+		this.points += 100;
 	}
 }
 
@@ -64,6 +101,24 @@ class Enemy extends GameObject {
 	}
 }
 
+// Láser se mueve gradualmente hacia la parte superior de la pantalla.
+class Laser extends GameObject {
+	constructor(x, y) {
+		super(x, y);
+	  	(this.width = 9), (this.height = 33);
+	  	this.type = 'Laser';
+	  	this.img = laserImg;
+	  	let id = setInterval(() => {
+			if (this.y > 0) {
+				this.y -= 15;
+			} else {
+				this.dead = true;
+				clearInterval(id);
+			}
+		}, 100);
+	}
+}
+
 // -Drawing to canvas-
 function loadTexture(path) {
 	return new Promise((resolve) => {
@@ -75,12 +130,20 @@ function loadTexture(path) {
 	});
 }
 
+// Código que verifica la colisión
+function intersectRect(r1, r2) {
+	return !(r2.left > r1.right || r2.right < r1.left || r2.top > r1.bottom || r2.bottom < r1.top);
+  }
+
 // Agrega constantes y configura el EventEmitter:
 const Messages = {
 	KEY_EVENT_UP: 'KEY_EVENT_UP',
 	KEY_EVENT_DOWN: 'KEY_EVENT_DOWN',
 	KEY_EVENT_LEFT: 'KEY_EVENT_LEFT',
 	KEY_EVENT_RIGHT: 'KEY_EVENT_RIGHT',
+	KEY_EVENT_SPACE: "KEY_EVENT_SPACE",
+	COLLISION_ENEMY_LASER: "COLLISION_ENEMY_LASER",
+	COLLISION_ENEMY_HERO: "COLLISION_ENEMY_HERO",
 };
 
 let heroImg,
@@ -122,6 +185,10 @@ window.addEventListener('keyup', (evt) => {
 		eventEmitter.emit(Messages.KEY_EVENT_LEFT);
 	} else if (evt.key === 'ArrowRight') {
 		eventEmitter.emit(Messages.KEY_EVENT_RIGHT);
+	}else if(evt.keyCode === 32) {
+		eventEmitter.emit(Messages.KEY_EVENT_SPACE);
+	}else if (evt.key === 'Enter') {
+		eventEmitter.emit(Messages.KEY_EVENT_ENTER);
 	}
 });
 
@@ -148,6 +215,33 @@ function createHero() {
 	gameObjects.push(hero);
 }
 
+// Manejar colisiones, implementar reglas de colisión para el láser
+function updateGameObjects() {
+	const enemies = gameObjects.filter((go) => go.type === 'Enemy');
+	const lasers = gameObjects.filter((go) => go.type === 'Laser');
+
+	enemies.forEach((enemy) => {
+		const heroRect = hero.rectFromGameObject();
+		if (intersectRect(heroRect, enemy.rectFromGameObject())) {
+			eventEmitter.emit(Messages.COLLISION_ENEMY_HERO, { enemy });
+		}
+	});
+
+  // laser hit something
+	lasers.forEach((l) => {
+		enemies.forEach((m) => {
+			if (intersectRect(l.rectFromGameObject(), m.rectFromGameObject())) {
+				eventEmitter.emit(Messages.COLLISION_ENEMY_LASER, {
+					first: l,
+					second: m,
+				});
+			}
+		});
+	});
+	
+	gameObjects = gameObjects.filter((go) => !go.dead);
+}  
+
 // función para comenzar el dibujo
 function drawGameObjects(ctx) {
 	gameObjects.forEach((go) => go.draw(ctx));
@@ -159,6 +253,7 @@ function initGame() {
 	createEnemies();
 	createHero();
 
+	// Agregar oyentes de eventos
 	eventEmitter.on(Messages.KEY_EVENT_UP, () => {
 		hero.y -= 5;
 	});
@@ -174,22 +269,135 @@ function initGame() {
 	eventEmitter.on(Messages.KEY_EVENT_RIGHT, () => {
 		hero.x += 5;
 	});
+
+	// Oyente para asegurarse de que el héroe pueda disparar cuando se presione la tecla de espacio
+	eventEmitter.on(Messages.KEY_EVENT_SPACE, () => {
+		if (hero.canFire()) {
+			hero.fire();
+		}
+		// console.log('cant fire - cooling down')
+	});
+
+	eventEmitter.on(Messages.COLLISION_ENEMY_LASER, (_, { first, second }) => {
+		first.dead = true;
+		second.dead = true;
+		hero.incrementPoints();
+
+		if (isEnemiesDead()) {
+			eventEmitter.emit(Messages.GAME_END_WIN);
+		}
+	});
+
+	eventEmitter.on(Messages.COLLISION_ENEMY_HERO, (_, { enemy }) => {
+		enemy.dead = true;
+		hero.decrementLife();
+		if (isHeroDead()) {
+			eventEmitter.emit(Messages.GAME_END_LOSS);
+			return; // loss before victory
+		}
+		if (isEnemiesDead()) {
+			eventEmitter.emit(Messages.GAME_END_WIN);
+		}
+	});
+
+	eventEmitter.on(Messages.GAME_END_WIN, () => {
+		endGame(true);
+	});
+	eventEmitter.on(Messages.GAME_END_LOSS, () => {
+		endGame(false);
+	});
+
+	
 }
+
+function drawLife() {
+	// TODO, 35, 27
+	//
+
+	const START_POS = canvas.width - 180;
+	for (let i = 0; i < hero.life; i++) {
+		ctx.drawImage(lifeImg, START_POS + 45 * (i + 1), canvas.height - 37);
+	}
+}
+
+function drawPoints() {
+	ctx.font = '30px Arial';
+	ctx.fillStyle = 'red';
+	ctx.textAlign = 'left';
+	drawText('Points: ' + hero.points, 10, canvas.height - 20);
+}
+
+function drawText(message, x, y) {
+	ctx.fillText(message, x, y);
+}
+
+function displayMessage(message, color = 'red') {
+	ctx.font = '30px Arial';
+	ctx.fillStyle = color;
+	ctx.textAlign = 'center';
+	ctx.fillText(message, canvas.width / 2, canvas.height / 2);
+}
+
+function isHeroDead() {
+	return hero.life <= 0;
+}
+
+function isEnemiesDead() {
+	const enemies = gameObjects.filter((go) => go.type === 'Enemy' && !go.dead);
+	return enemies.length === 0;
+}
+
+function endGame(win) {
+	clearInterval(gameLoopId);
+
+	// set delay so we are sure any paints have finished
+	setTimeout(() => {
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		ctx.fillStyle = 'black';
+		ctx.fillRect(0, 0, canvas.width, canvas.height);
+		if (win) {
+			displayMessage('Victory!!! Pew Pew... - Press [Enter] to start a new game Captain Pew Pew', 'green');
+		} else {
+			displayMessage('You died !!! Press [Enter] to start a new game Captain Pew Pew');
+		}
+	}, 200);
+}
+
+function resetGame() {
+	if (gameLoopId) {
+		clearInterval(gameLoopId);
+		eventEmitter.clear();
+		initGame();
+		gameLoopId = setInterval(() => {
+			ctx.clearRect(0, 0, canvas.width, canvas.height);
+			ctx.fillStyle = 'black';
+			ctx.fillRect(0, 0, canvas.width, canvas.height);
+			drawPoints();
+			drawLife();
+			updateGameObjects();
+			drawGameObjects(ctx);
+		}, 100);
+	}
+}
+
 
 // Configura el bucle del juego
 window.onload = async () => {
 	canvas = document.getElementById('canvas');
-	// @ts-ignore
 	ctx = canvas.getContext('2d');
 	heroImg = await loadTexture('assets/player.png');
 	enemyImg = await loadTexture('assets/enemyShip.png');
 	laserImg = await loadTexture('assets/laserRed.png');
+	lifeImg = await loadTexture('assets/life.png');
 
 	initGame();
 	let gameLoopId = setInterval(() => {
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		ctx.fillStyle = 'black';
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
+		updateGameObjects();
+		drawPoints();
+		drawLife();
 		drawGameObjects(ctx);
 	}, 100);
 };
