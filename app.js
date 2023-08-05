@@ -54,6 +54,7 @@ class Hero extends GameObject {
 		this.type = 'Hero';
 		this.speed = { x: 0, y: 0 };
 		this.cooldown = 0;
+		//  establece la vida y los puntos
 		this.life = 3;
 		this.points = 0;
 	}
@@ -73,12 +74,16 @@ class Hero extends GameObject {
 	canFire() {
 		return this.cooldown === 0;
 	}
+
+	// Por cada colisión entre héroes y enemigos, resta una vida
 	decrementLife() {
 		this.life--;
 		if (this.life === 0) {
 			this.dead = true;
 		}
 	}
+
+	//Por cada láser que golpea a un enemigo, aumenta la puntuación del juego con 100 puntos.
 	incrementPoints() {
 		this.points += 100;
 	}
@@ -148,7 +153,7 @@ const Messages = {
 
 let heroImg,
 	enemyImg,
-	laserImg,
+	laserImg, // laser
 	canvas,
 	ctx,
 	gameObjects = [],
@@ -220,6 +225,7 @@ function updateGameObjects() {
 	const enemies = gameObjects.filter((go) => go.type === 'Enemy');
 	const lasers = gameObjects.filter((go) => go.type === 'Laser');
 
+	// Manejar las colisiones enemigas
 	enemies.forEach((enemy) => {
 		const heroRect = hero.rectFromGameObject();
 		if (intersectRect(heroRect, enemy.rectFromGameObject())) {
@@ -278,6 +284,7 @@ function initGame() {
 		// console.log('cant fire - cooling down')
 	});
 
+	// Detectar colision del laser
 	eventEmitter.on(Messages.COLLISION_ENEMY_LASER, (_, { first, second }) => {
 		first.dead = true;
 		second.dead = true;
@@ -288,6 +295,7 @@ function initGame() {
 		}
 	});
 
+	// Detectar la colision del heroe
 	eventEmitter.on(Messages.COLLISION_ENEMY_HERO, (_, { enemy }) => {
 		enemy.dead = true;
 		hero.decrementLife();
@@ -310,6 +318,7 @@ function initGame() {
 	
 }
 
+// Dibuja estos valores en la pantalla
 function drawLife() {
 	// TODO, 35, 27
 	//
@@ -320,6 +329,7 @@ function drawLife() {
 	}
 }
 
+// Dibuja el puntaje
 function drawPoints() {
 	ctx.font = '30px Arial';
 	ctx.fillStyle = 'red';
@@ -327,6 +337,7 @@ function drawPoints() {
 	drawText('Points: ' + hero.points, 10, canvas.height - 20);
 }
 
+// Dibuja el texto de mensaje
 function drawText(message, x, y) {
 	ctx.fillText(message, x, y);
 }
@@ -385,16 +396,17 @@ function resetGame() {
 window.onload = async () => {
 	canvas = document.getElementById('canvas');
 	ctx = canvas.getContext('2d');
-	heroImg = await loadTexture('assets/player.png');
-	enemyImg = await loadTexture('assets/enemyShip.png');
-	laserImg = await loadTexture('assets/laserRed.png');
-	lifeImg = await loadTexture('assets/life.png');
+	heroImg = await loadTexture('assets/player.png'); // heroe
+	enemyImg = await loadTexture('assets/enemyShip.png'); // enemigo
+	laserImg = await loadTexture('assets/laserRed.png'); // laser
+	lifeImg = await loadTexture('assets/life.png'); // life
 
 	initGame();
 	let gameLoopId = setInterval(() => {
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		ctx.fillStyle = 'black';
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
+		// Agregar métodos al bucle del juego.
 		updateGameObjects();
 		drawPoints();
 		drawLife();
