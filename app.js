@@ -1,5 +1,6 @@
 // -Add Motion-
 // Crea una clase EventEmitter para publicar y suscribirse a mensajes
+let gameLoopId;
 class EventEmitter {
 	constructor() {
 		this.listeners = {};
@@ -16,6 +17,9 @@ class EventEmitter {
 		if (this.listeners[message]) {
 			this.listeners[message].forEach((l) => l(message, payload));
 		}
+	}
+	clear() {
+		this.listeners = {};
 	}
 }
 
@@ -142,13 +146,16 @@ function intersectRect(r1, r2) {
 
 // Agrega constantes y configura el EventEmitter:
 const Messages = {
+	KEY_EVENT_ENTER: 'KEY_EVENT_ENTER',
 	KEY_EVENT_UP: 'KEY_EVENT_UP',
 	KEY_EVENT_DOWN: 'KEY_EVENT_DOWN',
 	KEY_EVENT_LEFT: 'KEY_EVENT_LEFT',
 	KEY_EVENT_RIGHT: 'KEY_EVENT_RIGHT',
-	KEY_EVENT_SPACE: "KEY_EVENT_SPACE",
-	COLLISION_ENEMY_LASER: "COLLISION_ENEMY_LASER",
-	COLLISION_ENEMY_HERO: "COLLISION_ENEMY_HERO",
+	KEY_EVENT_SPACE: 'KEY_EVENT_SPACE',
+	COLLISION_ENEMY_LASER: 'COLLISION_ENEMY_LASER',
+	COLLISION_ENEMY_HERO: 'COLLISION_ENEMY_HERO',
+	GAME_END_LOSS: 'GAME_END_LOSS',
+	GAME_END_WIN: 'GAME_END_WIN',
 };
 
 let heroImg,
@@ -161,7 +168,6 @@ let heroImg,
 	eventEmitter = new EventEmitter();
 
 // EVENTS
-// @ts-ignore
 let onKeyDown = function (e) {
 	console.log(e.keyCode);
 	switch (e.keyCode) {
@@ -193,7 +199,7 @@ window.addEventListener('keyup', (evt) => {
 	}else if(evt.keyCode === 32) {
 		eventEmitter.emit(Messages.KEY_EVENT_SPACE);
 	}else if (evt.key === 'Enter') {
-		eventEmitter.emit(Messages.KEY_EVENT_ENTER);
+		eventEmitter.emit(Messages.KEY_EVENT_ENTER); //Código que reinicia el juego con solo presionar un botón seleccionado.
 	}
 });
 
@@ -259,6 +265,11 @@ function initGame() {
 	createEnemies();
 	createHero();
 
+	// Reinicia el juego
+	eventEmitter.on(Messages.KEY_EVENT_ENTER, () => {
+		resetGame();
+	});
+
 	// Agregar oyentes de eventos
 	eventEmitter.on(Messages.KEY_EVENT_UP, () => {
 		hero.y -= 5;
@@ -295,7 +306,7 @@ function initGame() {
 		}
 	});
 
-	// Detectar la colision del heroe
+	// Detectar la colision del heroe con el enemigo
 	eventEmitter.on(Messages.COLLISION_ENEMY_HERO, (_, { enemy }) => {
 		enemy.dead = true;
 		hero.decrementLife();
@@ -318,6 +329,34 @@ function initGame() {
 	
 }
 
+// Finaliza el juego en caso de destruir los objetivos o en caso de perder todas las vidas 
+function endGame(win) {
+	clearInterval(gameLoopId);
+
+	// set delay so we are sure any paints have finished
+	setTimeout(() => {
+		ctx.clearRect(0, 0, canvas.width, canvas.height);
+		ctx.fillStyle = 'black';
+		ctx.fillRect(0, 0, canvas.width, canvas.height);
+		if (win) {
+			displayMessage('Victory!!! Pew Pew... - Press [Enter] to start a new game Captain Pew Pew', 'green');
+		} else {
+			displayMessage('You died !!! Press [Enter] to start a new game Captain Pew Pew');
+		}
+	}, 200);
+}
+
+// Verifica si el barco héroe ha sido destruido 
+function isHeroDead() {
+	return hero.life <= 0;
+}
+
+// Seguimiento de la cantidad de enemigos destruidos
+function isEnemiesDead() {
+	const enemies = gameObjects.filter((go) => go.type === 'Enemy' && !go.dead);
+	return enemies.length === 0;
+}
+
 // Dibuja estos valores en la pantalla
 function drawLife() {
 	// TODO, 35, 27
@@ -336,12 +375,12 @@ function drawPoints() {
 	ctx.textAlign = 'left';
 	drawText('Points: ' + hero.points, 10, canvas.height - 20);
 }
-
 // Dibuja el texto de mensaje
 function drawText(message, x, y) {
 	ctx.fillText(message, x, y);
 }
 
+// Muestra un mensaje de victoria.
 function displayMessage(message, color = 'red') {
 	ctx.font = '30px Arial';
 	ctx.fillStyle = color;
@@ -349,31 +388,7 @@ function displayMessage(message, color = 'red') {
 	ctx.fillText(message, canvas.width / 2, canvas.height / 2);
 }
 
-function isHeroDead() {
-	return hero.life <= 0;
-}
-
-function isEnemiesDead() {
-	const enemies = gameObjects.filter((go) => go.type === 'Enemy' && !go.dead);
-	return enemies.length === 0;
-}
-
-function endGame(win) {
-	clearInterval(gameLoopId);
-
-	// set delay so we are sure any paints have finished
-	setTimeout(() => {
-		ctx.clearRect(0, 0, canvas.width, canvas.height);
-		ctx.fillStyle = 'black';
-		ctx.fillRect(0, 0, canvas.width, canvas.height);
-		if (win) {
-			displayMessage('Victory!!! Pew Pew... - Press [Enter] to start a new game Captain Pew Pew', 'green');
-		} else {
-			displayMessage('You died !!! Press [Enter] to start a new game Captain Pew Pew');
-		}
-	}, 200);
-}
-
+// Verifica si se pierdan todas las vidas o el jugador haya ganado el juego, muestre que el juego se puede reiniciar.
 function resetGame() {
 	if (gameLoopId) {
 		clearInterval(gameLoopId);
@@ -402,14 +417,14 @@ window.onload = async () => {
 	lifeImg = await loadTexture('assets/life.png'); // life
 
 	initGame();
-	let gameLoopId = setInterval(() => {
+	gameLoopId = setInterval(() => {
 		ctx.clearRect(0, 0, canvas.width, canvas.height);
 		ctx.fillStyle = 'black';
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 		// Agregar métodos al bucle del juego.
-		updateGameObjects();
 		drawPoints();
 		drawLife();
+		updateGameObjects();
 		drawGameObjects(ctx);
 	}, 100);
 };
