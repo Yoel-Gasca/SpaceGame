@@ -1,5 +1,5 @@
 // -Add Motion-
-// Crea una clase EventEmitter para publicar y suscribirse a mensajes
+// EventEmitter para publicar y suscribirse a mensajes
 let gameLoopId;
 class EventEmitter {
 	constructor() {
@@ -18,6 +18,8 @@ class EventEmitter {
 			this.listeners[message].forEach((l) => l(message, payload));
 		}
 	}
+
+	// Limpia la suscripción y publicación de mensajes
 	clear() {
 		this.listeners = {};
 	}
@@ -62,6 +64,8 @@ class Hero extends GameObject {
 		this.life = 3;
 		this.points = 0;
 	}
+
+	// Cooldown de los disparos del heroe
 	fire() {
 		gameObjects.push(new Laser(this.x + 45, this.y - 10));
 		this.cooldown = 500;
@@ -244,7 +248,7 @@ function updateGameObjects() {
 		enemies.forEach((m) => {
 			if (intersectRect(l.rectFromGameObject(), m.rectFromGameObject())) {
 				eventEmitter.emit(Messages.COLLISION_ENEMY_LASER, {
-					first: l,
+					first: 2,
 					second: m,
 				});
 			}
@@ -272,19 +276,19 @@ function initGame() {
 
 	// Agregar oyentes de eventos
 	eventEmitter.on(Messages.KEY_EVENT_UP, () => {
-		hero.y -= 5;
+		hero.y -= 10;
 	});
 
 	eventEmitter.on(Messages.KEY_EVENT_DOWN, () => {
-		hero.y += 5;
+		hero.y += 10;
 	});
 
 	eventEmitter.on(Messages.KEY_EVENT_LEFT, () => {
-		hero.x -= 5;
+		hero.x -= 10;
 	});
 
 	eventEmitter.on(Messages.KEY_EVENT_RIGHT, () => {
-		hero.x += 5;
+		hero.x += 10;
 	});
 
 	// Oyente para asegurarse de que el héroe pueda disparar cuando se presione la tecla de espacio
@@ -339,9 +343,9 @@ function endGame(win) {
 		ctx.fillStyle = 'black';
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
 		if (win) {
-			displayMessage('Victory!!! Pew Pew... - Press [Enter] to start a new game Captain Pew Pew', 'green');
+			displayMessage('¡Victoria - Presiona [Enter] para iniciar un nuevo juego Capitan!', 'green');
 		} else {
-			displayMessage('You died !!! Press [Enter] to start a new game Captain Pew Pew');
+			displayMessage('Has muerto Presiona [Enter] para volver a intentarlo Capitan');
 		}
 	}, 200);
 }
